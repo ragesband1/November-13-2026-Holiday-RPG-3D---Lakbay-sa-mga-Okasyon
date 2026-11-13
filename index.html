@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holiday RPG 3D - Lakbay sa mga Okasyon</title>
+    <!-- Tailwind CSS para sa UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Fredoka', sans-serif;
+            user-select: none;
+            overflow: hidden;
+            background-color: #0d1117;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .realm-btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .realm-btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        }
+
+        /* Animated pulse effect for active quest */
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(245, 158, 11, 0.8); }
+            50% { border-color: rgba(245, 158, 11, 0.3); }
+        }
+        
+        .active-quest-box {
+            animation: pulse-border 2s infinite;
+        }
+
+        /* Floating interaction text animation */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        .floating-anim {
+            animation: float 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay (HUD) -->
+    <div id="ui-layer" class="relative z-10 w-full h-screen pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- Header / Top Bar -->
+        <div class="flex justify-between items-start w-full gap-4">
+            <!-- Player Stats -->
+            <div class="glass-panel p-4 rounded-2xl pointer-events-auto flex items-center gap-4 border border-amber-500/30 min-w-[280px]">
+                <div class="relative">
+                    <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-900 text-2xl font-bold border-2 border-white shadow-lg">
+                        <i class="fa-solid fa-user-ninja"></i>
+                    </div>
+                    <span id="player-level" class="absolute -bottom-1 -right-1 bg-amber-500 text-slate-900 font-extrabold text-xs px-2 py-0.5 rounded-full border border-white">
+                        Lv. 1
+                    </span>
+                </div>
+                <div class="flex-1">
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                        <span class="text-amber-300">Bayani (Hero)</span>
+                        <span id="hp-text" class="text-emerald-400">100 / 100 HP</span>
+                    </div>
+                    <!-- Health Bar -->
+                    <div class="w-full bg-slate-800 rounded-full h-3 mb-2 overflow-hidden border border-slate-700">
+                        <div id="hp-bar" class="bg-gradient-to-r from-emerald-500 to-green-400 h-full w-full transition-all duration-300"></div>
+                    </div>
+                    <!-- XP Bar -->
+                    <div class="flex justify-between text-[10px] text-slate-400 mb-0.5">
+                        <span>XP</span>
+                        <span id="xp-text">0 / 100</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                        <div id="xp-bar" class="bg-gradient-to-r from-blue-500 to-indigo-400 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Realm Indicator & Quest Tracker -->
+            <div class="glass-panel p-4 rounded-2xl pointer-events-auto active-quest-box border-2 max-w-xs w-full text-right sm:text-left">
+                <div class="text-xs uppercase tracking-wider text-amber-400 font-bold mb-1 flex items-center gap-1.5 justify-end sm:justify-start">
+                    <i class="fa-solid fa-compass"></i> Kasalukuyang Realmo
+                </div>
+                <div id="realm-title" class="text-xl font-extrabold text-white tracking-wide">
+                    Valentine's Day
+                </div>
+                <div id="quest-desc" class="text-xs text-slate-300 mt-2 bg-slate-900/50 p-2 rounded-lg border border-slate-700/50">
+                    Kumuha ng mga <span class="text-pink-400 font-bold">Puso ❤️</span> sa paligid!
+                </div>
+                <div class="mt-2 text-xs font-semibold text-slate-400 flex justify-between items-center">
+                    <span>Mithiin (Quest):</span>
+                    <span id="quest-progress" class="text-amber-400 font-bold text-sm">0 / 5</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="self-center glass-panel px-6 py-3 rounded-full border border-amber-400/50 text-amber-300 font-semibold text-sm transform transition-all duration-300 opacity-0 translate-y-4 shadow-xl">
+            Pumasok sa Bagong Realmo!
+        </div>
+
+        <!-- Controls Helper & Realm Selector Menu -->
+        <div class="flex flex-col md:flex-row justify-between items-end gap-4 w-full">
+            <!-- Controls Legend -->
+            <div class="glass-panel p-3.5 rounded-xl pointer-events-auto text-xs text-slate-300 border border-slate-700 hidden sm:block">
+                <div class="font-bold text-amber-400 mb-1 flex items-center gap-1">
+                    <i class="fa-solid fa-gamepad"></i> MGA KONTROL:
+                </div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <span><b class="text-white">WASD / Arrow Keys:</b> Galaw</span>
+                    <span><b class="text-white">Spacebar:</b> Tumalon</span>
+                    <span><b class="text-white">Mouse Drag:</b> Paikutin ang Kamera</span>
+                    <span><b class="text-white">E Key:</b> Interaksyon</span>
+                </div>
+            </div>
+
+            <!-- Realm Switching Hub Buttons -->
+            <div class="glass-panel p-3 rounded-2xl pointer-events-auto flex gap-2 flex-wrap justify-center border border-slate-700/80 w-full md:w-auto">
+                <button onclick="switchRealm('valentine')" class="realm-btn flex-1 min-w-[100px] bg-gradient-to-r from-pink-600 to-rose-500 hover:from-pink-500 hover:to-rose-400 px-3 py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md">
+                    <i class="fa-solid fa-heart text-base"></i>
+                    <span>Puso (Valentine)</span>
+                </button>
+                <button onclick="switchRealm('labor')" class="realm-btn flex-1 min-w-[100px] bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 px-3 py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md">
+                    <i class="fa-solid fa-wrench text-base"></i>
+                    <span>Manggagawa</span>
+                </button>
+                <button onclick="switchRealm('halloween')" class="realm-btn flex-1 min-w-[100px] bg-gradient-to-r from-purple-700 to-indigo-600 hover:from-purple-600 hover:to-indigo-500 px-3 py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md">
+                    <i class="fa-solid fa-ghost text-base"></i>
+                    <span>Halloween</span>
+                </button>
+                <button onclick="switchRealm('christmas')" class="realm-btn flex-1 min-w-[100px] bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 px-3 py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 shadow-md">
+                    <i class="fa-solid fa-snowflake text-base"></i>
+                    <span>Pasko (Christmas)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Virtual Controls (Touch devices) -->
+    <div class="md:hidden fixed bottom-20 left-4 z-20 pointer-events-auto flex flex-col items-center gap-2">
+        <div class="flex gap-2">
+            <button id="btn-up" class="w-12 h-12 bg-slate-800/80 text-white rounded-full flex items-center justify-center active:bg-amber-500 font-bold border border-slate-600"><i class="fa-solid fa-arrow-up"></i></button>
+        </div>
+        <div class="flex gap-4">
+            <button id="btn-left" class="w-12 h-12 bg-slate-800/80 text-white rounded-full flex items-center justify-center active:bg-amber-500 font-bold border border-slate-600"><i class="fa-solid fa-arrow-left"></i></button>
+            <button id="btn-right" class="w-12 h-12 bg-slate-800/80 text-white rounded-full flex items-center justify-center active:bg-amber-500 font-bold border border-slate-600"><i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+        <div class="flex gap-2">
+            <button id="btn-down" class="w-12 h-12 bg-slate-800/80 text-white rounded-full flex items-center justify-center active:bg-amber-500 font-bold border border-slate-600"><i class="fa-solid fa-arrow-down"></i></button>
+        </div>
+    </div>
+    <div class="md:hidden fixed bottom-20 right-4 z-20 pointer-events-auto">
+        <button id="btn-jump" class="w-16 h-16 bg-amber-500 text-slate-900 rounded-full flex items-center justify-center font-extrabold shadow-lg active:scale-95 text-sm border-2 border-white">TALON</button>
+    </div>
+
+    <!-- MAIN GAME LOGIC (3D Scene Engine) -->
+    <script>
+        // --- GAME CONFIG & STATE ---
+        const gameState = {
+            level: 1,
+            xp: 0,
+            xpToNextLevel: 100,
+            hp: 100,
+            maxHp: 100,
+            currentRealm: 'valentine',
+            score: {
+                valentine: 0,
+                labor: 0,
+                halloween: 0,
+                christmas: 0
+            },
+            targetScore: 5
+        };
+
+        const REALM_DATA = {
+            valentine: {
+                name: "Valentine's Day Realm",
+                skyColor: 0xffb6c1,
+                fogColor: 0xffc0cb,
+                groundColor: 0xe85d75,
+                questText: "Mag-ipon ng mga Puso sa romantikong kagubatan!",
+                itemName: "Puso",
+                itemIcon: "❤️"
+            },
+            labor: {
+                name: "Labor Day Industrial Realm",
+                skyColor: 0xff944d,
+                fogColor: 0xd97724,
+                groundColor: 0x4a4e69,
+                questText: "Kolektahin ang mga Liyabe (Wrench) sa pabrika!",
+                itemName: "Liyabe",
+                itemIcon: "🔧"
+            },
+            halloween: {
+                name: "Spooky Halloween Realm",
+                skyColor: 0x1a0933,
+                fogColor: 0x2d124d,
+                groundColor: 0x2b2d42,
+                questText: "Hanapin ang mga Kendi sa nakakatakot na sementeryo!",
+                itemName: "Kendi",
+                itemIcon: "🍬"
+            },
+            christmas: {
+                name: "Christmas Wonderland",
+                skyColor: 0x0f2027,
+                fogColor: 0x203a43,
+                groundColor: 0xf8f9fa,
+                questText: "Kolektahin ang mga Regalo sa ilalim ng niyebe!",
+                itemName: "Regalo",
+                itemIcon: "🎁"
+            }
+        };
+
+        // --- THREE.JS SETUP ---
+        let scene, camera, renderer;
+        let player, playerBody;
+        let keys = {};
+        let touchControls = { forward: false, backward: false, left: false, right: false, jump: false };
+        let collectibles = [];
+        let environmentGroup;
+        let particleSystem;
+        let cameraAngleX = 0;
+        let cameraAngleY = 0.3;
+        let isMouseDown = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        // Physics variables
+        let playerVelocity = new THREE.Vector3();
+        let isGrounded = true;
+        const GRAVITY = -28;
+        const JUMP_FORCE = 12;
+        const SPEED = 10;
+
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            initEngine();
+            setupLights();
+            createPlayer();
+            switchRealm('valentine');
+            setupInputListeners();
+            animate();
+        };
+
+        function initEngine() {
+            const container = document.getElementById('canvas-container');
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0xffc0cb, 0.015);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Environment Container Group
+            environmentGroup = new THREE.Group();
+            scene.add(environmentGroup);
+
+            // Resize handling
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        let ambientLight, dirLight, realmPointLight;
+
+        function setupLights() {
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 150;
+            const d = 40;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            realmPointLight = new THREE.PointLight(0xffffff, 1, 30);
+            scene.add(realmPointLight);
+        }
+
+        // --- PLAYER CREATION (Low Poly Character) ---
+        function createPlayer() {
+            player = new THREE.Group();
+
+            // Body
+            const bodyGeo = new THREE.CylinderGeometry(0.5, 0.4, 1.2, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.3 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.9;
+            body.castShadow = true;
+            player.add(body);
+
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.8;
+            head.castShadow = true;
+            player.add(head);
+
+            // Hero Hat / Cap
+            const hatGeo = new THREE.ConeGeometry(0.45, 0.4, 8);
+            const hatMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b });
+            const hat = new THREE.Mesh(hatGeo, hatMat);
+            hat.position.y = 2.1;
+            hat.rotation.x = -0.1;
+            hat.castShadow = true;
+            player.add(hat);
+
+            // Eyes
+            const eyeGeo = new THREE.SphereGeometry(0.06, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+            
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(0.15, 1.85, 0.32);
+            player.add(leftEye);
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(-0.15, 1.85, 0.32);
+            player.add(rightEye);
+
+            // Scarf / Cape
+            const capeGeo = new THREE.BoxGeometry(0.6, 0.8, 0.1);
+            const capeMat = new THREE.MeshStandardMaterial({ color: 0xef4444 });
+            const cape = new THREE.Mesh(capeGeo, capeMat);
+            cape.position.set(0, 1.2, -0.3);
+            cape.rotation.x = 0.2;
+            player.add(cape);
+
+            player.position.set(0, 0, 0);
+            scene.add(player);
+        }
+
+        // --- BUILD HOLIDAY REALMS ---
+        function switchRealm(realmKey) {
+            gameState.currentRealm = realmKey;
+            const data = REALM_DATA[realmKey];
+
+            // Update UI
+            document.getElementById('realm-title').innerText = data.name;
+            document.getElementById('quest-desc').innerHTML = `${data.questText}`;
+            updateQuestUI();
+
+            showToast(`Pumasok sa: ${data.name}`);
+
+            // Update Lighting & Sky Fog
+            scene.background = new THREE.Color(data.skyColor);
+            scene.fog.color.setHex(data.fogColor);
+
+            // Clear Old Environment & Collectibles
+            while(environmentGroup.children.length > 0) {
+                const obj = environmentGroup.children[0];
+                environmentGroup.remove(obj);
+            }
+            collectibles = [];
+
+            // Build Ground
+            const groundGeo = new THREE.PlaneGeometry(120, 120, 32, 32);
+            const groundMat = new THREE.MeshStandardMaterial({ 
+                color: data.groundColor, 
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            environmentGroup.add(ground);
+
+            // Decorative Boundary Fence/Rocks
+            createBoundaries();
+
+            // Build Theme-Specific Assets & Collectibles
+            if (realmKey === 'valentine') {
+                buildValentineRealm();
+            } else if (realmKey === 'labor') {
+                buildLaborRealm();
+            } else if (realmKey === 'halloween') {
+                buildHalloweenRealm();
+            } else if (realmKey === 'christmas') {
+                buildChristmasRealm();
+            }
+
+            // Create Dynamic Particles
+            createParticles(realmKey);
+
+            // Reset player position
+            player.position.set(0, 0, 0);
+            playerVelocity.set(0, 0, 0);
+        }
+
+        // --- ENVIRONMENT GENERATORS ---
+        function createBoundaries() {
+            const rockGeo = new THREE.DodecahedronGeometry(1.5, 1);
+            const rockMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.9 });
+            
+            for(let i = 0; i < 40; i++) {
+                const angle = (i / 40) * Math.PI * 2;
+                const radius = 55;
+                const rock = new THREE.Mesh(rockGeo, rockMat);
+                rock.position.set(Math.cos(angle) * radius, 0.5, Math.sin(angle) * radius);
+                rock.scale.set(1 + Math.random(), 1 + Math.random() * 2, 1 + Math.random());
+                rock.castShadow = true;
+                environmentGroup.add(rock);
+            }
+        }
+
+        // 1. VALENTINE'S DAY REALM
+        function buildValentineRealm() {
+            ambientLight.color.setHex(0xffd1dc);
+            dirLight.color.setHex(0xffb3c1);
+
+            // Heart Trees
+            for (let i = 0; i < 25; i++) {
+                const x = (Math.random() - 0.5) * 80;
+                const z = (Math.random() - 0.5) * 80;
+                if (Math.hypot(x, z) < 8) continue; // Keep spawn clear
+
+                const tree = new THREE.Group();
+                // Trunk
+                const trunk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.3, 0.5, 3),
+                    new THREE.MeshStandardMaterial({ color: 0x5c3d2e })
+                );
+                trunk.position.y = 1.5;
+                trunk.castShadow = true;
+                tree.add(trunk);
+
+                // Foliage (Heart shape via sphere scale)
+                const foliage = new THREE.Mesh(
+                    new THREE.SphereGeometry(1.8, 16, 16),
+                    new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? 0xff4d6d : 0xff758f, roughness: 0.5 })
+                );
+                foliage.position.y = 3.5;
+                foliage.scale.set(1.2, 1.2, 0.8);
+                foliage.castShadow = true;
+                tree.add(foliage);
+
+                tree.position.set(x, 0, z);
+                environmentGroup.add(tree);
+            }
+
+            // Spawn Heart Items to collect
+            spawnCollectibles('heart', 0xff0054);
+        }
+
+        // 2. LABOR DAY REALM
+        function buildLaborRealm() {
+            ambientLight.color.setHex(0xffd8a8);
+            dirLight.color.setHex(0xff922b);
+
+            // Factory Structures & Gears
+            for (let i = 0; i < 18; i++) {
+                const x = (Math.random() - 0.5) * 80;
+                const z = (Math.random() - 0.5) * 80;
+                if (Math.hypot(x, z) < 8) continue;
+
+                const structure = new THREE.Group();
+                
+                // Brick/Concrete Pillars
+                const pillar = new THREE.Mesh(
+                    new THREE.BoxGeometry(2, 6 + Math.random() * 4, 2),
+                    new THREE.MeshStandardMaterial({ color: 0x343a40, roughness: 0.7 })
+                );
+                pillar.position.y = pillar.geometry.parameters.height / 2;
+                pillar.castShadow = true;
+                structure.add(pillar);
+
+                // Metallic gear decorative header
+                const gear = new THREE.Mesh(
+                    new THREE.TorusGeometry(1.2, 0.3, 8, 16),
+                    new THREE.MeshStandardMaterial({ color: 0xfcc419, metalness: 0.8, roughness: 0.2 })
+                );
+                gear.position.y = pillar.geometry.parameters.height + 0.5;
+                gear.rotation.x = Math.PI / 2;
+                structure.add(gear);
+
+                structure.position.set(x, 0, z);
+                environmentGroup.add(structure);
+            }
+
+            spawnCollectibles('wrench', 0xffa94d);
+        }
+
+        // 3. HALLOWEEN REALM
+        function buildHalloweenRealm() {
+            ambientLight.color.setHex(0x9c88ff);
+            dirLight.color.setHex(0x44337a);
+
+            // Pumpkins & Spooky Dead Trees
+            for (let i = 0; i < 30; i++) {
+                const x = (Math.random() - 0.5) * 80;
+                const z = (Math.random() - 0.5) * 80;
+                if (Math.hypot(x, z) < 8) continue;
+
+                if (Math.random() > 0.4) {
+                    // Pumpkin
+                    const pumpkin = new THREE.Group();
+                    const body = new THREE.Mesh(
+                        new THREE.SphereGeometry(1, 12, 12),
+                        new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.6 })
+                    );
+                    body.scale.set(1.2, 0.9, 1.2);
+                    body.position.y = 0.8;
+                    body.castShadow = true;
+                    pumpkin.add(body);
+
+                    const stem = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.1, 0.15, 0.5),
+                        new THREE.MeshStandardMaterial({ color: 0x15803d })
+                    );
+                    stem.position.y = 1.6;
+                    pumpkin.add(stem);
+
+                    pumpkin.position.set(x, 0, z);
+                    environmentGroup.add(pumpkin);
+                } else {
+                    // Dead Spooky Tree
+                    const tree = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.2, 0.6, 5, 6),
+                        new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9 })
+                    );
+                    tree.position.set(x, 2.5, z);
+                    tree.rotation.z = (Math.random() - 0.5) * 0.3;
+                    tree.castShadow = true;
+                    environmentGroup.add(tree);
+                }
+            }
+
+            spawnCollectibles('candy', 0xa855f7);
+        }
+
+        // 4. CHRISTMAS REALM
+        function buildChristmasRealm() {
+            ambientLight.color.setHex(0xdbeafe);
+            dirLight.color.setHex(0x93c5fd);
+
+            // Pine Trees with Snow and Lights
+            for (let i = 0; i < 28; i++) {
+                const x = (Math.random() - 0.5) * 80;
+                const z = (Math.random() - 0.5) * 80;
+                if (Math.hypot(x, z) < 8) continue;
+
+                const tree = new THREE.Group();
+                
+                // Trunk
+                const trunk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.4, 0.6, 2),
+                    new THREE.MeshStandardMaterial({ color: 0x451a03 })
+                );
+                trunk.position.y = 1;
+                tree.add(trunk);
+
+                // Pine Cone Cones
+                const pineColor = 0x064e3b;
+                for(let c = 0; c < 3; c++) {
+                    const cone = new THREE.Mesh(
+                        new THREE.ConeGeometry(2.2 - c * 0.5, 2.5, 8),
+                        new THREE.MeshStandardMaterial({ color: pineColor, roughness: 0.6 })
+                    );
+                    cone.position.y = 2.5 + c * 1.5;
+                    cone.castShadow = true;
+                    tree.add(cone);
+                }
+
+                tree.position.set(x, 0, z);
+                environmentGroup.add(tree);
+            }
+
+            spawnCollectibles('gift', 0xef4444);
+        }
+
+        // --- COLLECTIBLE ITEMS SPAWNER ---
+        function spawnCollectibles(type, colorHex) {
+            const geoMap = {
+                heart: new THREE.TetrahedronGeometry(0.8, 2),
+                wrench: new THREE.BoxGeometry(0.5, 1.2, 0.5),
+                candy: new THREE.OctahedronGeometry(0.7),
+                gift: new THREE.BoxGeometry(1, 1, 1)
+            };
+
+            for (let i = 0; i < 5; i++) {
+                const mesh = new THREE.Mesh(
+                    geoMap[type],
+                    new THREE.MeshStandardMaterial({ 
+                        color: colorHex, 
+                        emissive: colorHex, 
+                        emissiveIntensity: 0.4,
+                        roughness: 0.2,
+                        metalness: 0.5
+                    })
+                );
+
+                const x = (Math.random() - 0.5) * 60;
+                const z = (Math.random() - 0.5) * 60;
+                mesh.position.set(x, 1.2, z);
+                mesh.castShadow = true;
+
+                // Add glowing light around item
+                const itemLight = new THREE.PointLight(colorHex, 0.8, 4);
+                itemLight.position.set(0, 0, 0);
+                mesh.add(itemLight);
+
+                mesh.userData = { type: type, baseY: 1.2, rotSpeed: 0.02 + Math.random() * 0.02 };
+
+                environmentGroup.add(mesh);
+                collectibles.push(mesh);
+            }
+        }
+
+        // --- PARTICLE SYSTEM ENGINE ---
+        function createParticles(realmKey) {
+            if (particleSystem) scene.remove(particleSystem);
+
+            const particleCount = 200;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 100;
+                positions[i + 1] = Math.random() * 30;
+                positions[i + 2] = (Math.random() - 0.5) * 100;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            let pColor = 0xffffff;
+            let pSize = 0.3;
+
+            if (realmKey === 'valentine') { pColor = 0xffb3c1; pSize = 0.4; }
+            else if (realmKey === 'labor') { pColor = 0xffc078; pSize = 0.25; }
+            else if (realmKey === 'halloween') { pColor = 0xa855f7; pSize = 0.35; }
+            else if (realmKey === 'christmas') { pColor = 0xffffff; pSize = 0.4; }
+
+            const material = new THREE.PointsMaterial({
+                color: pColor,
+                size: pSize,
+                transparent: true,
+                opacity: 0.7
+            });
+
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+        }
+
+        function updateParticles() {
+            if (!particleSystem) return;
+            const positions = particleSystem.geometry.attributes.position.array;
+
+            for (let i = 1; i < positions.length; i += 3) {
+                positions[i] -= 0.05; // Fall downwards
+                if (positions[i] < 0) positions[i] = 25; // Loop back top
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // --- CONTROLS & INPUT LISTENERS ---
+        function setupInputListeners() {
+            // Keyboard
+            window.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+                if (e.code === 'Space') jump();
+            });
+            window.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+
+            // Orbit Camera via Mouse Drag
+            window.addEventListener('mousedown', (e) => {
+                if (e.button === 0) {
+                    isMouseDown = true;
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                }
+            });
+
+            window.addEventListener('mouseup', () => isMouseDown = false);
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isMouseDown) return;
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+
+                cameraAngleX -= deltaX * 0.005;
+                cameraAngleY = Math.max(0.1, Math.min(Math.PI / 2.5, cameraAngleY + deltaY * 0.005));
+
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+
+            // Mobile Touch Support
+            setupMobileTouch();
+        }
+
+        function setupMobileTouch() {
+            const bindBtn = (id, key) => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.addEventListener('touchstart', (e) => { e.preventDefault(); touchControls[key] = true; });
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); touchControls[key] = false; });
+            };
+
+            bindBtn('btn-up', 'forward');
+            bindBtn('btn-down', 'backward');
+            bindBtn('btn-left', 'left');
+            bindBtn('btn-right', 'right');
+
+            const jumpBtn = document.getElementById('btn-jump');
+            if (jumpBtn) {
+                jumpBtn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    jump();
+                });
+            }
+        }
+
+        function jump() {
+            if (isGrounded) {
+                playerVelocity.y = JUMP_FORCE;
+                isGrounded = false;
+            }
+        }
+
+        // --- GAME LOOP & PHYSICS ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = Math.min(clock.getDelta(), 0.1);
+
+            // Handle Player Movement
+            handlePlayerMovement(delta);
+
+            // Animate Collectibles
+            animateCollectibles();
+
+            // Dynamic Weather Particles
+            updateParticles();
+
+            // Update Third Person Camera Follow
+            updateCameraPosition();
+
+            // Render
+            renderer.render(scene, camera);
+        }
+
+        function handlePlayerMovement(delta) {
+            // Movement Vector Relative to Camera
+            const moveDir = new THREE.Vector3();
+
+            const isFwd = keys['KeyW'] || keys['ArrowUp'] || touchControls.forward;
+            const isBwd = keys['KeyS'] || keys['ArrowDown'] || touchControls.backward;
+            const isLft = keys['KeyA'] || keys['ArrowLeft'] || touchControls.left;
+            const isRgt = keys['KeyD'] || keys['ArrowRight'] || touchControls.right;
+
+            if (isFwd) moveDir.z -= 1;
+            if (isBwd) moveDir.z += 1;
+            if (isLft) moveDir.x -= 1;
+            if (isRgt) moveDir.x += 1;
+
+            if (moveDir.length() > 0) {
+                moveDir.normalize();
+
+                // Rotate movement according to camera yaw angle
+                const cameraYaw = cameraAngleX;
+                const rotatedX = moveDir.x * Math.cos(cameraYaw) + moveDir.z * Math.sin(cameraYaw);
+                const rotatedZ = -moveDir.x * Math.sin(cameraYaw) + moveDir.z * Math.cos(cameraYaw);
+
+                player.position.x += rotatedX * SPEED * delta;
+                player.position.z += rotatedZ * SPEED * delta;
+
+                // Smoothly rotate player face towards movement direction
+                const targetAngle = Math.atan2(rotatedX, rotatedZ);
+                player.rotation.y = targetAngle;
+            }
+
+            // Gravity Physics
+            playerVelocity.y += GRAVITY * delta;
+            player.position.y += playerVelocity.y * delta;
+
+            // Ground Collision
+            if (player.position.y <= 0) {
+                player.position.y = 0;
+                playerVelocity.y = 0;
+                isGrounded = true;
+            }
+
+            // Keep inside map bounds
+            const maxBoundary = 50;
+            player.position.x = Math.max(-maxBoundary, Math.min(maxBoundary, player.position.x));
+            player.position.z = Math.max(-maxBoundary, Math.min(maxBoundary, player.position.z));
+        }
+
+        function animateCollectibles() {
+            const time = Date.now() * 0.003;
+
+            for (let i = collectibles.length - 1; i >= 0; i--) {
+                const item = collectibles[i];
+                item.rotation.y += item.userData.rotSpeed;
+                item.position.y = item.userData.baseY + Math.sin(time + i) * 0.2;
+
+                // Collision Check with Player
+                const dist = player.position.distanceTo(item.position);
+                if (dist < 1.8) {
+                    collectItem(item, i);
+                }
+            }
+        }
+
+        function collectItem(item, index) {
+            // Remove from Scene
+            environmentGroup.remove(item);
+            collectibles.splice(index, 1);
+
+            // Update Score & XP
+            const current = gameState.currentRealm;
+            gameState.score[current]++;
+            addXP(25);
+
+            updateQuestUI();
+
+            showToast(`Nakakuha ng ${REALM_DATA[current].itemName}! +25 XP ${REALM_DATA[current].itemIcon}`);
+        }
+
+        function addXP(amount) {
+            gameState.xp += amount;
+            if (gameState.xp >= gameState.xpToNextLevel) {
+                gameState.level++;
+                gameState.xp -= gameState.xpToNextLevel;
+                gameState.xpToNextLevel = Math.floor(gameState.xpToNextLevel * 1.5);
+                
+                showToast(`🎉 LEVEL UP! Level ${gameState.level} ka na!`);
+                document.getElementById('player-level').innerText = `Lv. ${gameState.level}`;
+            }
+
+            // Update UI bars
+            const xpPercent = (gameState.xp / gameState.xpToNextLevel) * 100;
+            document.getElementById('xp-bar').style.width = `${xpPercent}%`;
+            document.getElementById('xp-text').innerText = `${gameState.xp} / ${gameState.xpToNextLevel}`;
+        }
+
+        function updateQuestUI() {
+            const current = gameState.currentRealm;
+            const score = gameState.score[current];
+            const target = gameState.targetScore;
+            
+            const progressElem = document.getElementById('quest-progress');
+            progressElem.innerText = `${score} / ${target}`;
+
+            if (score >= target) {
+                progressElem.innerHTML = `<span class="text-green-400 font-bold">TAPOS NA! 🌟</span>`;
+            }
+        }
+
+        function updateCameraPosition() {
+            const cameraDistance = 12;
+            const camX = player.position.x + cameraDistance * Math.sin(cameraAngleX) * Math.cos(cameraAngleY);
+            const camY = player.position.y + cameraDistance * Math.sin(cameraAngleY) + 1.5;
+            const camZ = player.position.z + cameraDistance * Math.cos(cameraAngleX) * Math.cos(cameraAngleY);
+
+            camera.position.set(camX, camY, camZ);
+            camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.classList.remove('opacity-0', 'translate-y-4');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-4');
+            }, 2500);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
